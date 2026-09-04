@@ -1,4 +1,5 @@
 import os
+from config import ADMIN_IDS
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -19,7 +20,7 @@ def is_admin(user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start Command"""
     user_id = update.effective_user.id
-    if not is_admin(user_id):
+    if ADMIN_IDS and user_id not in ADMIN_IDS:
         await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
         return
     
@@ -230,3 +231,4 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎤 စာပေဟောပြောပွဲများ\n\n"
             "နောက်ထပ် အယ်လ်ဘမ်များ ထပ်တိုးနေပါပြီ။"
         )
+    
