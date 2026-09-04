@@ -1,0 +1,6 @@
+python-telegram-bot==21.7
+yt-dlp==2024.12.23
+google-api-python-client==2.157.0
+python-dotenv==1.0.1
+rabbit-python==0.1.6
+moviepy==1.0.3
