@@ -4,4 +4,5 @@ google-api-python-client==2.157.0
 python-dotenv==1.0.1
 moviepy==1.0.3
 pymongo==4.10.1
+PyYAML==6.0.2
 rabbit
