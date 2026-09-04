@@ -66,3 +66,17 @@ def get_file_size_mb(file_path):
         size_bytes = os.path.getsize(file_path)
         return size_bytes / (1024 * 1024)
     return 0
+# ဇော်ဂျီ-ယူနီကုဒ် ပြောင်းတဲ့ Mapping ကို သတ်မှတ်ပါ
+ZAWGYI_TO_UNICODE = {
+    '္': '်', 'ႏ': 'န်', '၍': 'ရ', '၌': 'နှ', 
+    # ... စာလုံးတွေ အကုန်လုံးကို ထည့်ဖို့ လိုပါလိမ့်မယ်
+}
+
+def zg2uni(text):
+    """ဇော်ဂျီ ကနေ ယူနီကုဒ် ပြောင်းမယ်"""
+    if not text:
+        return text
+    result = text
+    for zg, uni in ZAWGYI_TO_UNICODE.items():
+        result = result.replace(zg, uni)
+    return result
