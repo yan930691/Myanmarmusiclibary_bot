@@ -12,10 +12,6 @@ def download_audio_from_youtube(youtube_url, output_path=None):
         output_path = tempfile.gettempdir()
     
     # yt-dlp အတွက် Command
-    # --extract-audio: အသံထုတ်မယ်
-    # --audio-format mp3: MP3 ပုံစံ
-    # --audio-quality 5: အရည်အသွေးကောင်း
-    # --add-metadata: Metadata ထည့်မယ်
     cmd = [
         'yt-dlp',
         '--extract-audio',
@@ -33,7 +29,6 @@ def download_audio_from_youtube(youtube_url, output_path=None):
         for file in os.listdir(output_path):
             if file.endswith('.mp3'):
                 file_path = os.path.join(output_path, file)
-                # Title နဲ့ Performer ကို ဖိုင်နာမည်ကနေ ဆွဲယူမယ် (သို့) metadata ကနေ
                 title = os.path.splitext(file)[0]
                 performer = "Unknown"
                 return file_path, title, performer
