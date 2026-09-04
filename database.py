@@ -3,9 +3,12 @@ from datetime import datetime
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
+import logging
 
 from config import MONGODB_URI, DATABASE_NAME
-from converter import zg2uni  # rabbit အစား converter ကို သုံးပါ
+from converter import zg2uni
+
+logger = logging.getLogger(__name__)
 
 # MongoDB Client ကို ချိတ်ဆက်ပါ
 client = MongoClient(MONGODB_URI)
@@ -15,6 +18,16 @@ db = client[DATABASE_NAME]
 content_types_collection = db['content_types']
 categories_collection = db['categories']
 contents_collection = db['contents']
+
+def test_connection():
+    """MongoDB ချိတ်ဆက်မှုကို စမ်းသပ်မယ်"""
+    try:
+        client.admin.command('ping')
+        logger.info("✅ MongoDB connection successful!")
+        return True
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection failed: {e}")
+        return False
 
 def init_db():
     """Database ကို စတင်ဆောက်လုပ်မယ် (MongoDB)"""
@@ -44,16 +57,15 @@ def init_db():
                 {"_id": 3, "content_type_id": 3, "name": "အသံဇာတ်လမ်းများ", "cover_file_id": None, "created_at": datetime.utcnow()}
             ])
         
-        print("✅ Database initialized successfully!")
+        logger.info("✅ Database initialized successfully!")
         return True
     except Exception as e:
-        print(f"❌ Database init error: {e}")
+        logger.error(f"❌ Database init error: {e}")
         return False
 
 def save_content(category_id, title, performer, album, file_id, file_type, youtube_url, metadata=""):
     """Content အသစ်ကို MongoDB ထဲ သိမ်းမယ်"""
     try:
-        # converter ကနေ zg2uni ကို သုံးပါ (rabbit မပါ)
         title_uni = zg2uni(title) if title else "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
         performer_uni = zg2uni(performer) if performer else "အဆိုတော်မသတ်မှတ်ရသေး"
         album_uni = zg2uni(album) if album else "အယ်လ်ဘမ်မသတ်မှတ်ရသေး"
@@ -74,10 +86,10 @@ def save_content(category_id, title, performer, album, file_id, file_type, youtu
         result = contents_collection.insert_one(content_data)
         return str(result.inserted_id)
     except DuplicateKeyError:
-        print(f"⚠️ Content already exists: {youtube_url}")
+        logger.warning(f"⚠️ Content already exists: {youtube_url}")
         return None
     except Exception as e:
-        print(f"❌ Save content error: {e}")
+        logger.error(f"❌ Save content error: {e}")
         return None
 
 def get_all_contents(limit=100):
@@ -91,7 +103,7 @@ def get_all_contents(limit=100):
             "created_at": 1
         }).sort("created_at", -1).limit(limit))
     except Exception as e:
-        print(f"❌ Get all contents error: {e}")
+        logger.error(f"❌ Get all contents error: {e}")
         return []
 
 def content_exists(youtube_url):
@@ -99,7 +111,7 @@ def content_exists(youtube_url):
     try:
         return contents_collection.find_one({"youtube_url": youtube_url}) is not None
     except Exception as e:
-        print(f"❌ Check content exists error: {e}")
+        logger.error(f"❌ Check content exists error: {e}")
         return False
 
 def get_content_by_id(content_id):
@@ -107,7 +119,7 @@ def get_content_by_id(content_id):
     try:
         return contents_collection.find_one({"_id": ObjectId(content_id)})
     except Exception as e:
-        print(f"❌ Get content by ID error: {e}")
+        logger.error(f"❌ Get content by ID error: {e}")
         return None
 
 def get_content_by_file_id(file_id):
@@ -115,7 +127,7 @@ def get_content_by_file_id(file_id):
     try:
         return contents_collection.find_one({"file_id": file_id})
     except Exception as e:
-        print(f"❌ Get content by file ID error: {e}")
+        logger.error(f"❌ Get content by file ID error: {e}")
         return None
 
 def search_contents(query, category_id=None, limit=20):
@@ -137,7 +149,7 @@ def search_contents(query, category_id=None, limit=20):
             "file_id": 1, "file_type": 1
         }).limit(limit))
     except Exception as e:
-        print(f"❌ Search contents error: {e}")
+        logger.error(f"❌ Search contents error: {e}")
         return []
 
 def delete_content(content_id):
@@ -146,7 +158,7 @@ def delete_content(content_id):
         result = contents_collection.delete_one({"_id": ObjectId(content_id)})
         return result.deleted_count > 0
     except Exception as e:
-        print(f"❌ Delete content error: {e}")
+        logger.error(f"❌ Delete content error: {e}")
         return False
 
 def get_categories():
@@ -159,7 +171,7 @@ def get_categories():
             "name": 1
         }))
     except Exception as e:
-        print(f"❌ Get categories error: {e}")
+        logger.error(f"❌ Get categories error: {e}")
         return []
 
 def get_content_types():
@@ -171,7 +183,7 @@ def get_content_types():
             "name": 1
         }))
     except Exception as e:
-        print(f"❌ Get content types error: {e}")
+        logger.error(f"❌ Get content types error: {e}")
         return []
 
 def get_stats():
@@ -187,5 +199,5 @@ def get_stats():
             "others": total_contents - total_music - total_dhamma
         }
     except Exception as e:
-        print(f"❌ Get stats error: {e}")
+        logger.error(f"❌ Get stats error: {e}")
         return {"total": 0, "music": 0, "dhamma": 0, "others": 0}
