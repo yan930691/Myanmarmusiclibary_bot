@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============ Main Function ============
-def main():
+async def main():
     try:
         logger.info("🚀 Starting YouTube Music Bot...")
         
@@ -232,10 +232,12 @@ def main():
                 first=10
             )
             logger.info(f"🔄 Auto-search scheduled every {SEARCH_INTERVAL_MINUTES} minutes")
+        else:
+            logger.warning("⚠️ JobQueue is not available! Auto-search will not work.")
         
         # ---- 10. Run Bot ----
         logger.info("✅ Bot is ready!")
-        application.run_polling(
+        await application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
@@ -245,15 +247,6 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
+# ============ Entry Point ============
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
-    if __name__ == "__main__":
-    import asyncio
-    # Event loop အသစ်တစ်ခု ဖန်တီးပါ
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.close()
