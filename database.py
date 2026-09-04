@@ -82,3 +82,11 @@ def get_content_by_id(content_id):
     result = c.fetchone()
     conn.close()
     return result
+def get_content_count():
+    """Database ထဲက သီချင်းအရေအတွက်ကို ယူမယ်"""
+    conn = sqlite3.connect(DATABASE_FILE)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM contents")
+    count = c.fetchone()[0]
+    conn.close()
+    return count
