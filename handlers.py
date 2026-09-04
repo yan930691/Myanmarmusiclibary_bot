@@ -1,0 +1,156 @@
+import os
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from rabbit import Rabbit
+from config import CHANNEL_ID, ADMIN_ID, DOWNLOAD_PATH, MAX_FILE_SIZE_MB
+from database import save_content, content_exists, get_content_by_id
+from youtube_api import search_youtube_music, extract_video_id
+from converter import download_audio_from_youtube, get_file_size_mb
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/start Command"""
+    user_id = update.effective_user.id
+    if ADMIN_ID and user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
+        return
+    
+    await update.message.reply_text(
+        "🤖 **YouTube Music Bot**\n\n"
+        "ဒီ Bot က YouTube ကနေ မြန်မာသီချင်းတွေကို ရှာဖွေပြီး ချန်နယ်မှာ အလိုအလျောက် တင်ပေးမှာပါ။\n\n"
+        "📌 Commands:\n"
+        "/search - သီချင်းအသစ်တွေကို ရှာဖွေမယ်\n"
+        "/post - ချန်နယ်မှာ Player Message ပို့မယ်\n"
+        "/status - Bot အခြေအနေ ကြည့်မယ်"
+    )
+
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/search Command - YouTube မှာ သီချင်းအသစ်တွေကို ရှာဖွေမယ်"""
+    user_id = update.effective_user.id
+    if ADMIN_ID and user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
+        return
+    
+    await update.message.reply_text("🔍 YouTube မှာ မြန်မာသီချင်းအသစ်တွေကို ရှာဖွေနေပါပြီ...")
+    
+    results = await asyncio.to_thread(search_youtube_music)
+    
+    if not results:
+        await update.message.reply_text("❌ သီချင်းအသစ်မတွေ့ပါ။")
+        return
+    
+    found_new = False
+    for video in results:
+        if not content_exists(video['url']):
+            found_new = True
+            await process_new_video(video, context)
+    
+    if not found_new:
+        await update.message.reply_text("✅ သီချင်းအသစ်မရှိပါ။ အားလုံးက Database ထဲမှာ ရှိပြီးသားပါ။")
+    else:
+        await update.message.reply_text("✅ သီချင်းအသစ်များကို ချန်နယ်မှာ တင်ပြီးပါပြီ။")
+
+async def process_new_video(video, context):
+    """Video အသစ်ကို ဒေါင်းလုဒ်လုပ်ပြီး ချန်နယ်မှာ တင်မယ်"""
+    try:
+        # ၁။ YouTube ကနေ Audio ဒေါင်းလုဒ်လုပ်မယ်
+        audio_path, title, performer = await asyncio.to_thread(
+            download_audio_from_youtube, video['url'], DOWNLOAD_PATH
+        )
+        
+        if not audio_path:
+            print(f"Download failed for {video['url']}")
+            return
+        
+        # ၂။ ဖိုင်အရွယ်အစား စစ်ဆေးမယ်
+        file_size_mb = get_file_size_mb(audio_path)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            os.remove(audio_path)
+            print(f"File too large: {file_size_mb}MB")
+            return
+        
+        # ၃။ ဇော်ဂျီကနေ ယူနီကုဒ်ပြောင်းမယ်
+        title_uni = Rabbit.zg2uni(title) if title else "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
+        performer_uni = Rabbit.zg2uni(performer) if performer else "အဆိုတော်မသတ်မှတ်ရသေး"
+        
+        # ၄။ Telegram ကို Audio ဖိုင် ပို့မယ်
+        with open(audio_path, 'rb') as audio_file:
+            message = await context.bot.send_audio(
+                chat_id=CHANNEL_ID,
+                audio=audio_file,
+                title=title_uni,
+                performer=performer_uni,
+                caption=f"🎵 **{title_uni}**\n🎤 {performer_uni}"
+            )
+        
+        # ၅။ Database ထဲ သိမ်းမယ်
+        file_id = message.audio.file_id
+        save_content(
+            category_id=1,
+            title=title_uni,
+            performer=performer_uni,
+            album="မြန်မာသီချင်းများ",
+            file_id=file_id,
+            file_type="audio",
+            youtube_url=video['url']
+        )
+        
+        # ၆။ Player Message ကို ချန်နယ်မှာ ပို့မယ်
+        await send_player_message(context, title_uni, performer_uni, file_id)
+        
+        # ၇။ ခေတ္တဖိုင်ကို ရှင်းမယ်
+        os.remove(audio_path)
+        
+    except Exception as e:
+        print(f"Error processing video: {e}")
+
+async def send_player_message(context, title, performer, file_id):
+    """Inline Keyboard ပါတဲ့ Player Message ကို ချန်နယ်မှာ ပို့မယ်"""
+    keyboard = [
+        [
+            InlineKeyboardButton("▶️ နားဆင်ရန်", callback_data=f"play_{file_id}"),
+            InlineKeyboardButton("⬇️ ဒေါင်းလုဒ်", callback_data=f"download_{file_id}")
+        ],
+        [
+            InlineKeyboardButton("📋 အယ်လ်ဘမ်အားလုံး", callback_data="albums")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=CHANNEL_ID,
+        text=f"🎵 **သီချင်းအသစ် ရောက်ရှိပါပြီ**\n\n"
+             f"📌 **ခေါင်းစဉ်:** {title}\n"
+             f"🎤 **အဆိုတော်:** {performer}\n\n"
+             f"⬇️ နားဆင်ရန် အောက်ပါခလုတ်ကို နှိပ်ပါ။",
+        reply_markup=reply_markup
+    )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inline Keyboard ခလုတ်တွေကို ကိုင်တွယ်မယ်"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    
+    if data.startswith("play_"):
+        file_id = data.replace("play_", "")
+        await context.bot.send_audio(
+            chat_id=update.effective_chat.id,
+            audio=file_id,
+            caption="▶️ **နားဆင်နေပါပြီ...**"
+        )
+    
+    elif data.startswith("download_"):
+        file_id = data.replace("download_", "")
+        await context.bot.send_audio(
+            chat_id=update.effective_chat.id,
+            audio=file_id,
+            caption="⬇️ **ဒေါင်းလုဒ်လုပ်နေပါပြီ...**"
+        )
+    
+    elif data == "albums":
+        await query.edit_message_text(
+            "📋 **အယ်လ်ဘမ်များ**\n\n"
+            "မြန်မာသီချင်းများ - သီချင်းအသစ်များ\n"
+            "နောက်ထပ် အယ်လ်ဘမ်များ ထပ်တိုးနေပါပြီ။"
+        )
