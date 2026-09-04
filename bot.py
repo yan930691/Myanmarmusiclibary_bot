@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============ Main Function ============
-def main():
+async def main():
     try:
         logger.info("🚀 Starting YouTube Music Bot...")
         
@@ -237,7 +237,7 @@ def main():
         
         # ---- 10. Run Bot ----
         logger.info("✅ Bot is ready!")
-        application.run_polling(
+        await application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
@@ -249,4 +249,4 @@ def main():
 
 # ============ Entry Point ============
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
