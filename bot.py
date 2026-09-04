@@ -235,12 +235,24 @@ async def main():
         else:
             logger.warning("⚠️ JobQueue is not available! Auto-search will not work.")
         
-        # ---- 10. Run Bot ----
+        # ---- 10. Run Bot (ပြင်ဆင်ပြီး) ----
         logger.info("✅ Bot is ready!")
-        await application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
+        
+        # Application ကို စတင်ပါ
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        
+        # Bot ကို ရပ်တန့်တဲ့အထိ စောင့်ဆိုင်းပါ
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("🛑 Bot stopped by user")
+        finally:
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
         
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
