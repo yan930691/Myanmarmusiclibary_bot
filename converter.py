@@ -1,8 +1,10 @@
+import imageio_ffmpeg
 import os
 import subprocess
 import tempfile
 from moviepy.editor import VideoFileClip
-
+# ffmpeg ရဲ့ Path ကို သတ်မှတ်ပါ
+os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
 def download_audio_from_youtube(youtube_url, output_path=None):
     """
     YouTube ဗီဒီယိုကနေ MP3 ကို yt-dlp သုံးပြီး ဒေါင်းလုဒ်လုပ်မယ်
