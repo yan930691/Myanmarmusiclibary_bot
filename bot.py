@@ -4,11 +4,11 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-from config import BOT_TOKEN, CHANNEL_ID, SEARCH_INTERVAL_MINUTES
+from config import BOT_TOKEN, CHANNEL_ID, SEARCH_INTERVAL_MINUTES, TEXTS
 from database import init_db
 from youtube_api import search_youtube_music
-from handlers import start, search_command, button_handler
-from handlers import process_new_video
+from handlers import start, search_command, status_command, help_command, button_handler
+from handlers import process_new_video, channel_post_handler
 
 # Logging Setup
 logging.basicConfig(
@@ -30,7 +30,7 @@ async def auto_search_task(context: ContextTypes.DEFAULT_TYPE):
             for video in results:
                 if not content_exists(video['url']):
                     await process_new_video(video, context)
-                    await asyncio.sleep(2)  # Rate limit အတွက်
+                    await asyncio.sleep(2)
     except Exception as e:
         logger.error(f"Auto-search error: {e}")
 
@@ -43,8 +43,8 @@ async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # Audio ဖိုင်အတွက်
     if post.audio:
         audio = post.audio
-        title = audio.title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
-        performer = audio.performer or "အဆိုတော်မသတ်မှတ်ရသေး"
+        title = audio.title or TEXTS["new_song_title"]
+        performer = audio.performer or TEXTS["new_song_performer"]
         file_id = audio.file_id
         
         # ဇော်ဂျီကနေ ယူနီကုဒ်ပြောင်းမယ်
@@ -70,6 +70,8 @@ def main():
     # Handlers များ
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
     
     # ချန်နယ်ပို့စ်တွေကို စောင့်ကြည့်မယ်
@@ -80,8 +82,8 @@ def main():
     if job_queue:
         job_queue.run_repeating(
             auto_search_task,
-            interval=SEARCH_INTERVAL_MINUTES * 60,  # စက္ကန့်ပုံစံ
-            first=10  # Bot စဖွင့်တာ ၁၀ စက္ကန့်အကြာမှ စမယ်
+            interval=SEARCH_INTERVAL_MINUTES * 60,
+            first=10
         )
         logger.info(f"Auto-search scheduled every {SEARCH_INTERVAL_MINUTES} minutes")
     
