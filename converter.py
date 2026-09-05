@@ -20,13 +20,18 @@ from config import DOWNLOAD_PATH, MAX_FILE_SIZE_MB
 logger = logging.getLogger(__name__)
 
 # ============ FFmpeg Path Setup ============
-# Render မှာ ffmpeg ကို ရှာတွေ့အောင် သတ်မှတ်ပါ
-os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
+# ffmpeg ရဲ့ Path ကို imageio_ffmpeg ကနေ ယူပါ
+try:
+    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+    os.environ["IMAGEIO_FFMPEG_EXE"] = FFMPEG_PATH
+    os.environ["FFMPEG_BINARY"] = FFMPEG_PATH
+    logger.info(f"✅ FFmpeg found at: {FFMPEG_PATH}")
+except Exception as e:
+    logger.warning(f"⚠️ Could not find ffmpeg: {e}")
+    FFMPEG_PATH = "ffmpeg"  # fallback
 
 # ============ Zawgyi to Unicode Converter ============
-# ဇော်ဂျီနဲ့ ယူနီကုဒ် ကွာခြားတဲ့ စာလုံးတွေကို Mapping
 ZAWGYI_TO_UNICODE_MAP = {
-    # ဗျည်းများ
     'က္': 'က္', 'ဂ္': 'ဂ္', 'င္': 'င္', 'စ္': 'စ္', 'ဇ္': 'ဇ္',
     'ည္': 'ည္', 'ဋ္': 'ဋ္', 'ဌ္': 'ဌ္', 'ဍ္': 'ဍ္', 'ဏ္': 'ဏ္',
     'တ္': 'တ္', 'ထ္': 'ထ္', 'ဒ္': 'ဒ္', 'န္': 'န္', 'ပ္': 'ပ္',
@@ -34,52 +39,24 @@ ZAWGYI_TO_UNICODE_MAP = {
     'လ္': 'လ္', 'ဝ္': 'ဝ္', 'သ္': 'သ္', 'ဟ္': 'ဟ္', 'ဠ္': 'ဠ္',
     'အ': 'အ', 'ဣ': 'ဣ', 'ဤ': 'ဤ', 'ဥ': 'ဥ', 'ဦ': 'ဦ',
     'ဧ': 'ဧ', 'ဨ': 'ဨ', 'ဩ': 'ဩ', 'ဪ': 'ဪ',
-    # သင်္ကေတများ
     '၏': '၏', '၊': '၊', '။': '။',
     '္': '်', 'ျ': 'ျ', 'ွ': 'ွ', 'ှ': 'ှ', 'ဿ': 'ဿ',
     '၍': 'ရ', '၌': 'နှ', 'ႏ': 'န်', '႐': 'ရ', '႑': 'ဒ',
 }
 
-# မြန်မာစာလုံးများအတွက် ပုံမှန်မဟုတ်တဲ့ ဇော်ဂျီပုံစံများ
 ZAWGYI_SPECIAL_CASES = {
-    'ေက': 'ကေ',
-    'ေခ': 'ခေ',
-    'ေဂ': 'ဂေ',
-    'ေင': 'ငေ',
-    'ေစ': 'စေ',
-    'ေဆ': 'ဆေ',
-    'ေဇ': 'ဇေ',
-    'ေဈ': 'ဈေ',
-    'ေည': 'ညေ',
-    'ေဋ': 'ဋေ',
-    'ေဌ': 'ဌေ',
-    'ေဍ': 'ဍေ',
-    'ေဎ': 'ဎေ',
-    'ေဏ': 'ဏေ',
-    'ေတ': 'တေ',
-    'ေထ': 'ထေ',
-    'ေဒ': 'ဒေ',
-    'ေဓ': 'ဓေ',
-    'ေန': 'နေ',
-    'ေပ': 'ပေ',
-    'ေဖ': 'ဖေ',
-    'ေဗ': 'ဗေ',
-    'ေဘ': 'ဘေ',
-    'ေမ': 'မေ',
-    'ေယ': 'ယေ',
-    'ေရ': 'ရေ',
-    'ေလ': 'လေ',
-    'ေဝ': 'ဝေ',
-    'ေသ': 'သေ',
-    'ေဟ': 'ဟေ',
-    'ေဠ': 'ဠေ',
-    'ေအ': 'အေ',
+    'ေက': 'ကေ', 'ေခ': 'ခေ', 'ေဂ': 'ဂေ', 'ေင': 'ငေ',
+    'ေစ': 'စေ', 'ေဆ': 'ဆေ', 'ေဇ': 'ဇေ', 'ေဈ': 'ဈေ',
+    'ေည': 'ညေ', 'ေဋ': 'ဋေ', 'ေဌ': 'ဌေ', 'ေဍ': 'ဍေ',
+    'ေဎ': 'ဎေ', 'ေဏ': 'ဏေ', 'ေတ': 'တေ', 'ေထ': 'ထေ',
+    'ေဒ': 'ဒေ', 'ေဓ': 'ဓေ', 'ေန': 'နေ', 'ေပ': 'ပေ',
+    'ေဖ': 'ဖေ', 'ေဗ': 'ဗေ', 'ေဘ': 'ဘေ', 'ေမ': 'မေ',
+    'ေယ': 'ယေ', 'ေရ': 'ရေ', 'ေလ': 'လေ', 'ေဝ': 'ဝေ',
+    'ေသ': 'သေ', 'ေဟ': 'ဟေ', 'ေဠ': 'ဠေ', 'ေအ': 'အေ',
 }
 
 def zg2uni(text):
-    """
-    ဇော်ဂျီ ကနေ ယူနီကုဒ် ပြောင်းမယ်
-    """
+    """ဇော်ဂျီ ကနေ ယူနီကုဒ် ပြောင်းမယ်"""
     if not text or not isinstance(text, str):
         return text
     
@@ -93,39 +70,24 @@ def zg2uni(text):
     for zg, uni in ZAWGYI_TO_UNICODE_MAP.items():
         result = result.replace(zg, uni)
     
-    # နောက်ဆုံး သန့်စင်ခြင်း
-    # ဥပမာ - "ေက" ကို "ကေ" လို့ ပြောင်းပြီးသား
-    result = result.replace('ေက', 'ကေ')
-    result = result.replace('ေခ', 'ခေ')
-    
     return result
 
 def is_zawgyi(text):
-    """
-    စာသားက ဇော်ဂျီဟုတ်မဟုတ် စစ်ဆေးမယ်
-    """
+    """စာသားက ဇော်ဂျီဟုတ်မဟုတ် စစ်ဆေးမယ်"""
     if not text:
         return False
     
-    # ဇော်ဂျီမှာပါတဲ့ ထူးခြားတဲ့ စာလုံးတွေ
     zawgyi_patterns = ['္', 'ႏ', '႐', '၍', '၌', 'ေက', 'ေခ']
-    
     for pattern in zawgyi_patterns:
         if pattern in text:
             return True
-    
-    # ယူနီကုဒ်မှာမပါတဲ့ ဇော်ဂျီစာလုံးတွေ
-    zawgyi_chars = ['္', 'ႏ', '႐', '၍', '၌']
-    for char in zawgyi_chars:
-        if char in text:
-            return True
-    
     return False
 
 def clean_filename(filename):
-    """
-    ဖိုင်နာမည်ကို သန့်ရှင်းအောင်လုပ်မယ်
-    """
+    """ဖိုင်နာမည်ကို သန့်ရှင်းအောင်လုပ်မယ်"""
+    if not filename:
+        return "unknown"
+    
     # မလိုအပ်တဲ့ စာလုံးတွေကို ဖယ်ရှားပါ
     filename = re.sub(r'[<>:"/\\|?*]', '', filename)
     filename = re.sub(r'\s+', ' ', filename).strip()
@@ -134,7 +96,7 @@ def clean_filename(filename):
     if len(filename) > 200:
         filename = filename[:200]
     
-    return filename
+    return filename or "unknown"
 
 # ============ YouTube Download Functions ============
 
@@ -146,12 +108,12 @@ def download_audio_from_youtube(youtube_url, output_path=None):
     if not output_path:
         output_path = DOWNLOAD_PATH
     
-    # ဖိုင်တွဲ မရှိရင် ဖန်တီးပါ
     os.makedirs(output_path, exist_ok=True)
     
     # yt-dlp အတွက် Command
     cmd = [
         'yt-dlp',
+        '--ffmpeg-location', FFMPEG_PATH,  # ffmpeg path ကို ပြောပါ
         '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '5',
@@ -162,15 +124,15 @@ def download_audio_from_youtube(youtube_url, output_path=None):
     ]
     
     logger.info(f"📥 Downloading: {youtube_url}")
+    logger.info(f"🔧 Using ffmpeg: {FFMPEG_PATH}")
     
     try:
-        # Run the download
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             check=True,
-            timeout=300  # 5 minutes timeout
+            timeout=300
         )
         
         logger.info(f"✅ Download completed for: {youtube_url}")
@@ -182,7 +144,6 @@ def download_audio_from_youtube(youtube_url, output_path=None):
                 title = os.path.splitext(file)[0]
                 performer = "Unknown"
                 
-                # ဖိုင်နာမည်ကို သန့်ရှင်းအောင်လုပ်ပါ
                 title = clean_filename(title)
                 
                 logger.info(f"📁 Downloaded file: {file_path}")
@@ -195,7 +156,8 @@ def download_audio_from_youtube(youtube_url, output_path=None):
         logger.error(f"❌ Download timeout for: {youtube_url}")
         return None, None, None
     except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Download error for {youtube_url}: {e.stderr}")
+        logger.error(f"❌ Download error for {youtube_url}")
+        logger.error(f"   stderr: {e.stderr[:500]}")
         return None, None, None
     except Exception as e:
         logger.error(f"❌ Unexpected download error: {e}")
@@ -205,7 +167,6 @@ def download_audio_from_youtube_with_info(youtube_url, output_path=None):
     """
     YouTube ဗီဒီယိုကနေ MP3 ကို ဒေါင်းလုဒ်လုပ်ပြီး
     သီချင်းအချက်အလက်တွေကိုပါ ပြန်ပေးမယ်
-    ရလဒ်: (audio_file_path, title, performer, duration)
     """
     if not output_path:
         output_path = DOWNLOAD_PATH
@@ -236,7 +197,6 @@ def download_audio_from_youtube_with_info(youtube_url, output_path=None):
         uploader = video_info.get('uploader', 'Unknown')
         duration = video_info.get('duration', 0)
         
-        # ခေါင်းစဉ်ကို သန့်ရှင်းအောင်လုပ်ပါ
         title = clean_filename(title)
         
     except Exception as e:
@@ -254,10 +214,7 @@ def download_audio_from_youtube_with_info(youtube_url, output_path=None):
         return None, None, None, None
 
 def convert_mp4_to_mp3(video_path, output_path=None):
-    """
-    MP4 ဗီဒီယိုကို MP3 အသံအဖြစ် ပြောင်းမယ်
-    ရလဒ်: (output_file_path, error_message)
-    """
+    """MP4 ဗီဒီယိုကို MP3 အသံအဖြစ် ပြောင်းမယ်"""
     if not output_path:
         output_path = DOWNLOAD_PATH
     
@@ -269,11 +226,9 @@ def convert_mp4_to_mp3(video_path, output_path=None):
             logger.warning(f"⚠️ No audio track in: {video_path}")
             return None, "No audio track found"
         
-        # Output file name
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         output_file = os.path.join(output_path, f"{base_name}.mp3")
         
-        # Convert to MP3
         video.audio.write_audiofile(
             output_file,
             codec='mp3',
@@ -335,10 +290,6 @@ def cleanup_directory(directory_path, pattern=None):
     except Exception as e:
         logger.warning(f"⚠️ Directory cleanup error: {e}")
 
-def get_download_path():
-    """Download ဖိုင်တွဲရဲ့ လမ်းကြောင်းကို ယူမယ်"""
-    return DOWNLOAD_PATH
-
 def ensure_download_directory():
     """Download ဖိုင်တွဲ ရှိမရှိ စစ်ဆေးပြီး မရှိရင် ဖန်တီးမယ်"""
     os.makedirs(DOWNLOAD_PATH, exist_ok=True)
@@ -348,7 +299,7 @@ def get_ffmpeg_version():
     """ffmpeg ဗားရှင်းကို ယူမယ်"""
     try:
         result = subprocess.run(
-            ['ffmpeg', '-version'],
+            [FFMPEG_PATH, '-version'],
             capture_output=True,
             text=True,
             timeout=5
@@ -359,3 +310,15 @@ def get_ffmpeg_version():
             return "Unknown"
     except Exception:
         return "Not found"
+
+def test_ffmpeg():
+    """ffmpeg အလုပ်လုပ်လား စမ်းသပ်မယ်"""
+    try:
+        result = subprocess.run(
+            [FFMPEG_PATH, '-version'],
+            capture_output=True,
+            timeout=5
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
