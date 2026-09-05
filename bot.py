@@ -71,9 +71,11 @@ async def main():
             DATABASE_NAME
         )
         logger.info("✅ Config loaded successfully!")
+        logger.info(f"🔍 Search Query: {SEARCH_QUERY}")
+        logger.info(f"⏱️ Search Interval: {SEARCH_INTERVAL_MINUTES} minutes")
         
         # ---- 2. Database ----
-        from database import init_db, test_connection, get_stats
+        from database import init_db, test_connection, get_stats, content_exists
         logger.info("📊 Initializing database...")
         init_db()
         
@@ -81,6 +83,10 @@ async def main():
             logger.error("❌ MongoDB connection failed!")
             sys.exit(1)
         logger.info("✅ Database connected successfully!")
+        
+        # Check if database has any content
+        stats = get_stats()
+        logger.info(f"📊 Database stats: {stats}")
         
         # ---- 3. YouTube API ----
         from youtube_api import search_youtube_music
@@ -197,16 +203,21 @@ async def main():
                 new_count = 0
                 failed_count = 0
                 
+                # သီချင်းတစ်ပုဒ်ချင်းစီကို စစ်ဆေးပါ
                 for index, video in enumerate(results):
-                    # Check if already exists
+                    logger.info(f"🔍 Checking [{index+1}/{len(results)}]: {video['title'][:50]}...")
+                    
+                    # Database ထဲ ရှိပြီးသားလား စစ်ဆေးပါ
                     if content_exists(video['url']):
-                        logger.info(f"⏩ Already exists: {video['title']}")
+                        logger.info(f"⏩ Already exists in database: {video['title'][:50]}...")
                         continue
                     
+                    logger.info(f"🎵 New song found: {video['title'][:50]}...")
                     logger.info(f"🎵 Processing [{index+1}/{len(results)}]: {video['title']}")
                     
                     try:
-                        # Download audio
+                        # ၁။ ဒေါင်းလုဒ်လုပ်ပါ
+                        logger.info(f"📥 Downloading: {video['url']}")
                         audio_path, title, performer = await asyncio.to_thread(
                             download_audio_from_youtube,
                             video['url'],
@@ -214,11 +225,13 @@ async def main():
                         )
                         
                         if not audio_path:
-                            logger.error(f"❌ Download failed: {video['url']}")
+                            logger.error(f"❌ Download failed for: {video['url']}")
                             failed_count += 1
                             continue
                         
-                        # Check file size
+                        logger.info(f"✅ Download completed: {audio_path}")
+                        
+                        # ၂။ ဖိုင်အရွယ်အစား စစ်ဆေးပါ
                         file_size_mb = get_file_size_mb(audio_path)
                         logger.info(f"📊 File size: {file_size_mb:.2f}MB")
                         
@@ -228,18 +241,18 @@ async def main():
                             failed_count += 1
                             continue
                         
-                        # Send to Telegram
+                        # ၃။ Telegram ကို ပို့ပါ
                         with open(audio_path, 'rb') as f:
                             msg = await context.bot.send_audio(
                                 chat_id=CHANNEL_ID,
                                 audio=f,
                                 title=zg2uni(title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"),
                                 performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး"),
-                                duration=180  # 3 minutes default
+                                duration=180
                             )
                         
                         if msg and msg.audio:
-                            # Save to database
+                            # ၄။ Database ထဲ သိမ်းပါ
                             save_content(
                                 category_id=1,
                                 title=zg2uni(title),
@@ -250,7 +263,7 @@ async def main():
                                 youtube_url=video['url'],
                                 metadata=""
                             )
-                            # Send player message
+                            # ၅။ Player Message ပို့ပါ
                             await send_player_message(
                                 context,
                                 zg2uni(title),
@@ -265,7 +278,7 @@ async def main():
                         
                         cleanup_temp_files([audio_path])
                         
-                        # Wait between downloads
+                        # ၆။ ဒေါင်းလုဒ်တစ်ခုနဲ့တစ်ခုကြား အနားယူပါ
                         await asyncio.sleep(5)
                         
                     except Exception as e:
@@ -274,7 +287,7 @@ async def main():
                         failed_count += 1
                         continue
                     
-                    # Progress update every 5 songs
+                    # Progress update
                     if (index + 1) % 5 == 0:
                         logger.info(f"📊 Progress: {index + 1}/{len(results)} songs processed")
                 
