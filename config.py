@@ -20,7 +20,7 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 # YouTube ရှာဖွေမှု သတ်မှတ်ချက်များ
 SEARCH_QUERY = "မြန်မာသီချင်း"
 MAX_RESULTS_PER_SEARCH = 5
-SEARCH_INTERVAL_MINUTES = 30
+SEARCH_INTERVAL_MINUTES = 60
 
 # Download Settings
 DOWNLOAD_PATH = "downloads"
