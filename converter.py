@@ -62,9 +62,6 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         logger.error(f"❌ FFmpeg not working: {e}")
         return None, None, None
     
-    # Wait before download to avoid rate limit
-    time.sleep(2)
-    
     # Visitor Data
     visitor_data = "CgtwUlZzV25LUmllOCiQvuG7BjIHCgVnZW5lcg%3D%3D"
     
@@ -73,6 +70,7 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         '--ffmpeg-location', FFMPEG_PATH,
         '--extractor-args', f'youtube:visitor_data={visitor_data}',
         '--extractor-args', 'youtube:player_client=android',
+        '--extractor-args', 'youtube:player_client=web',
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '--extract-audio',
         '--audio-format', 'mp3',
@@ -85,6 +83,9 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
     
     logger.info(f"📥 Downloading: {youtube_url}")
     logger.info(f"🔧 Using ffmpeg: {FFMPEG_PATH}")
+    
+    # Rate limit ကိုရှောင်ဖို့ အနားယူပါ
+    time.sleep(3)
     
     try:
         result = subprocess.run(
