@@ -1,46 +1,78 @@
-import re
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from config import YOUTUBE_API_KEY, SEARCH_QUERY, MAX_RESULTS_PER_SEARCH
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+YouTube API Wrapper (SoundCloud ကို ခေါ်ဖို့ ပြောင်းထားတယ်)
+ဒီဖိုင်ကို YouTube API လို့ နာမည်ထားပေမယ့် SoundCloud ကနေ ရှာပါမယ်
+"""
+
+import subprocess
+import json
+import logging
+from config import SEARCH_QUERY, MAX_RESULTS_PER_SEARCH
+
+logger = logging.getLogger(__name__)
 
 def search_youtube_music(query=None, max_results=MAX_RESULTS_PER_SEARCH):
+    """
+    SoundCloud မှာ သီချင်းတွေကို ရှာဖွေမယ် (yt-dlp သုံးပြီး)
+    """
     if not query:
         query = SEARCH_QUERY
-
+    
+    cmd = [
+        'yt-dlp',
+        f'scsearch:{query}',
+        '--flat-playlist',
+        '--dump-json',
+        '--no-playlist',
+        '--max-downloads', str(max_results)
+    ]
+    
+    logger.info(f"🔍 Searching SoundCloud: {query}")
+    
     try:
-        youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-
-        request = youtube.search().list(
-            part="snippet",
-            q=query,
-            type="video",
-            videoCategoryId="10",
-            maxResults=max_results,
-            order="date"
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False
         )
-        response = request.execute()
-
+        
+        if result.returncode != 0:
+            logger.error(f"❌ Search failed: {result.stderr[:200]}")
+            return []
+        
         results = []
-        for item in response.get('items', []):
-            video_id = item['id']['videoId']
-            snippet = item['snippet']
-            title = snippet.get('title', '')
-            
-            if not re.search(r'[\u1000-\u109F]', title):
+        for line in result.stdout.strip().split('\n'):
+            if not line:
                 continue
-
-            results.append({
-                'title': title,
-                'video_id': video_id,
-                'url': f"https://www.youtube.com/watch?v={video_id}",
-                'channel_name': snippet.get('channelTitle', 'Unknown'),
-                'channel_id': snippet.get('channelId', ''),
-                'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
-                'description': snippet.get('description', '')
-            })
-
+            try:
+                data = json.loads(line)
+                title = data.get('title', '')
+                url = data.get('url', '')
+                if not url:
+                    continue
+                    
+                results.append({
+                    'title': title,
+                    'url': url,
+                    'channel_name': data.get('uploader', 'Unknown'),
+                    'channel_id': data.get('channel_id', ''),
+                    'thumbnail': data.get('thumbnail', ''),
+                    'description': data.get('description', ''),
+                    'duration': data.get('duration', 0)
+                })
+            except json.JSONDecodeError:
+                continue
+        
+        logger.info(f"✅ Found {len(results)} results from SoundCloud")
         return results
-
-    except HttpError as e:
-        print(f"YouTube API Error: {e}")
+        
+    except subprocess.TimeoutExpired:
+        logger.error("❌ Search timeout")
+        return []
+    except Exception as e:
+        logger.error(f"❌ Search error: {e}")
         return []
