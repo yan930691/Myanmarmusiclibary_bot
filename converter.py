@@ -5,6 +5,7 @@ import os
 import subprocess
 import logging
 import re
+import time
 import imageio_ffmpeg
 
 logger = logging.getLogger(__name__)
@@ -61,14 +62,17 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         logger.error(f"❌ FFmpeg not working: {e}")
         return None, None, None
     
-    # Visitor Data
+    # Visitor Data (Sample)
     visitor_data = "CgtwUlZzV25LUmllOCiQvuG7BjIHCgVnZW5lcg%3D%3D"
+    
+    # Wait before download to avoid rate limit
+    time.sleep(3)
     
     cmd = [
         'yt-dlp',
         '--ffmpeg-location', FFMPEG_PATH,
         '--extractor-args', f'youtube:visitor_data={visitor_data}',
-        '--extractor-args', 'youtube:po_token=NONE',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '5',
@@ -82,9 +86,6 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
     logger.info(f"🔧 Using ffmpeg: {FFMPEG_PATH}")
     
     try:
-        import time
-        time.sleep(2)  # Rate limit ကိုရှောင်ဖို့
-        
         result = subprocess.run(
             cmd,
             capture_output=True,
