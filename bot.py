@@ -75,7 +75,7 @@ async def main():
         logger.info(f"⏱️ Search Interval: {SEARCH_INTERVAL_MINUTES} minutes")
         
         # ---- 2. Database ----
-        from database import init_db, test_connection, get_stats, content_exists
+        from database import init_db, test_connection, get_stats
         logger.info("📊 Initializing database...")
         init_db()
         
@@ -84,7 +84,6 @@ async def main():
             sys.exit(1)
         logger.info("✅ Database connected successfully!")
         
-        # Check if database has any content
         stats = get_stats()
         logger.info(f"📊 Database stats: {stats}")
         
@@ -203,20 +202,17 @@ async def main():
                 new_count = 0
                 failed_count = 0
                 
-                # သီချင်းတစ်ပုဒ်ချင်းစီကို စစ်ဆေးပါ
                 for index, video in enumerate(results):
                     logger.info(f"🔍 Checking [{index+1}/{len(results)}]: {video['title'][:50]}...")
                     
-                    # Database ထဲ ရှိပြီးသားလား စစ်ဆေးပါ
                     if content_exists(video['url']):
-                        logger.info(f"⏩ Already exists in database: {video['title'][:50]}...")
+                        logger.info(f"⏩ Already exists: {video['title'][:50]}...")
                         continue
                     
                     logger.info(f"🎵 New song found: {video['title'][:50]}...")
                     logger.info(f"🎵 Processing [{index+1}/{len(results)}]: {video['title']}")
                     
                     try:
-                        # ၁။ ဒေါင်းလုဒ်လုပ်ပါ
                         logger.info(f"📥 Downloading: {video['url']}")
                         audio_path, title, performer = await asyncio.to_thread(
                             download_audio_from_youtube,
@@ -231,7 +227,6 @@ async def main():
                         
                         logger.info(f"✅ Download completed: {audio_path}")
                         
-                        # ၂။ ဖိုင်အရွယ်အစား စစ်ဆေးပါ
                         file_size_mb = get_file_size_mb(audio_path)
                         logger.info(f"📊 File size: {file_size_mb:.2f}MB")
                         
@@ -241,7 +236,6 @@ async def main():
                             failed_count += 1
                             continue
                         
-                        # ၃။ Telegram ကို ပို့ပါ
                         with open(audio_path, 'rb') as f:
                             msg = await context.bot.send_audio(
                                 chat_id=CHANNEL_ID,
@@ -252,7 +246,6 @@ async def main():
                             )
                         
                         if msg and msg.audio:
-                            # ၄။ Database ထဲ သိမ်းပါ
                             save_content(
                                 category_id=1,
                                 title=zg2uni(title),
@@ -263,7 +256,6 @@ async def main():
                                 youtube_url=video['url'],
                                 metadata=""
                             )
-                            # ၅။ Player Message ပို့ပါ
                             await send_player_message(
                                 context,
                                 zg2uni(title),
@@ -277,8 +269,6 @@ async def main():
                             failed_count += 1
                         
                         cleanup_temp_files([audio_path])
-                        
-                        # ၆။ ဒေါင်းလုဒ်တစ်ခုနဲ့တစ်ခုကြား အနားယူပါ
                         await asyncio.sleep(5)
                         
                     except Exception as e:
@@ -287,7 +277,6 @@ async def main():
                         failed_count += 1
                         continue
                     
-                    # Progress update
                     if (index + 1) % 5 == 0:
                         logger.info(f"📊 Progress: {index + 1}/{len(results)} songs processed")
                 
@@ -306,7 +295,6 @@ async def main():
             
             stats = get_stats()
             
-            # Check download path
             download_files = os.listdir(DOWNLOAD_PATH) if os.path.exists(DOWNLOAD_PATH) else []
             download_count = len([f for f in download_files if f.endswith('.mp3')])
             
