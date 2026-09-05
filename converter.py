@@ -10,12 +10,12 @@ import imageio_ffmpeg
 
 logger = logging.getLogger(__name__)
 
-# ffmpeg path
+# ============ FFmpeg Path Setup ============
 try:
     FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
     os.environ["IMAGEIO_FFMPEG_EXE"] = FFMPEG_PATH
     os.environ["FFMPEG_BINARY"] = FFMPEG_PATH
-    logger.info(f"✅ FFmpeg: {FFMPEG_PATH}")
+    logger.info(f"✅ FFmpeg found at: {FFMPEG_PATH}")
 except Exception as e:
     logger.warning(f"⚠️ FFmpeg error: {e}")
     FFMPEG_PATH = "ffmpeg"
@@ -62,16 +62,17 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         logger.error(f"❌ FFmpeg not working: {e}")
         return None, None, None
     
-    # Visitor Data (Sample)
-    visitor_data = "CgtwUlZzV25LUmllOCiQvuG7BjIHCgVnZW5lcg%3D%3D"
-    
     # Wait before download to avoid rate limit
-    time.sleep(3)
+    time.sleep(2)
+    
+    # Visitor Data
+    visitor_data = "CgtwUlZzV25LUmllOCiQvuG7BjIHCgVnZW5lcg%3D%3D"
     
     cmd = [
         'yt-dlp',
         '--ffmpeg-location', FFMPEG_PATH,
         '--extractor-args', f'youtube:visitor_data={visitor_data}',
+        '--extractor-args', 'youtube:player_client=android',
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '--extract-audio',
         '--audio-format', 'mp3',
