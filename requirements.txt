@@ -1,5 +1,5 @@
 python-telegram-bot[job-queue]==21.7
-yt-dlp
+yt-dlp>=2024.12.23
 google-api-python-client==2.157.0
 python-dotenv==1.0.1
 pymongo==4.10.1
