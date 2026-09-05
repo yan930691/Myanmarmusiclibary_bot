@@ -4,11 +4,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from config import CHANNEL_ID, ADMIN_IDS
-from database import get_stats, get_categories
-from converter import zg2uni  # rabbit အစား converter ကို သုံးပါ
+from database import get_stats
+from converter import zg2uni
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/start Command"""
     user_id = update.effective_user.id
     if ADMIN_IDS and user_id not in ADMIN_IDS:
         await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
@@ -29,21 +28,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/search Command - YouTube မှာ သီချင်းအသစ်တွေကို ရှာဖွေမယ်"""
     user_id = update.effective_user.id
     if ADMIN_IDS and user_id not in ADMIN_IDS:
         await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
         return
 
     await update.message.reply_text("🔍 YouTube မှာ မြန်မာသီချင်းအသစ်တွေကို ရှာဖွေနေပါပြီ...")
-    
-    # ဒီမှာ search_youtube_music ကို ခေါ်ဖို့ လိုပါတယ်
-    # ဒါပေမယ့် ခင်ဗျားရဲ့ bot.py မှာ auto_search_task က ဒီအလုပ်ကို လုပ်ပြီးသားမို့ 
-    # ဒီ command က ရိုးရိုးရှင်းရှင်း ပြန်ဖြေပေးလို့ရပါတယ်
-    await update.message.reply_text("✅ Auto-search က ပုံမှန်အလုပ်လုပ်နေပါပြီ။ သီချင်းအသစ်တွေကို အလိုအလျောက် ရှာဖွေတင်ပေးနေပါမယ်။")
+    await update.message.reply_text("✅ Auto-search က ပုံမှန်အလုပ်လုပ်နေပါပြီ။")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Inline Keyboard ခလုတ်တွေကို ကိုင်တွယ်မယ်"""
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -65,11 +58,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif data == "albums":
-        categories = get_categories()
-        if categories:
-            text = "📋 **အယ်လ်ဘမ်များ**\n\n"
-            for cat in categories:
-                text += f"• {cat['name']}\n"
-        else:
-            text = "📋 **အယ်လ်ဘမ်များ**\n\nအယ်လ်ဘမ်မရှိသေးပါဘူး။"
-        await query.edit_message_text(text)
+        await query.edit_message_text(
+            "📋 **အယ်လ်ဘမ်များ**\n\n"
+            "မြန်မာသီချင်းများ - သီချင်းအသစ်များ\n"
+            "နောက်ထပ် အယ်လ်ဘမ်များ ထပ်တိုးနေပါပြီ။"
+        )
