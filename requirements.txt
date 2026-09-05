@@ -1,8 +1,9 @@
 python-telegram-bot[job-queue]==21.7
-yt-dlp==2024.12.23
+yt-dlp
 google-api-python-client==2.157.0
 python-dotenv==1.0.1
 pymongo==4.10.1
 moviepy==1.0.3
 Flask==3.0.0
 imageio-ffmpeg==0.6.0
+apscheduler==3.10.4
