@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+YouTube Music Bot - မြန်မာသီချင်းတွေကို အလိုအလျောက် ရှာဖွေပြီး ချန်နယ်မှာ တင်ပေးမယ့် Bot
+"""
+
 import os
 import sys
 import asyncio
@@ -178,9 +182,10 @@ async def main():
         
         async def auto_search_task(context):
             """အလိုအလျောက် ရှာဖွေပြီး သီချင်းအသစ်တွေကို တင်ပေးမယ်"""
-            logger.info("🔍 Auto-search task STARTED!")  # ဒီ line ကို ထည့်ပါ
+            logger.info("🔍 Auto-search task STARTED!")
+            
             try:
-                logger.info("🔍 Auto-search running...")
+                logger.info("🔍 Searching YouTube...")
                 results = await asyncio.to_thread(search_youtube_music)
                 logger.info(f"📊 Found {len(results)} results from YouTube")
                 
@@ -190,12 +195,15 @@ async def main():
                 
                 from database import content_exists, save_content
                 new_count = 0
+                failed_count = 0
                 
-                for video in results:
+                for index, video in enumerate(results):
+                    # Check if already exists
                     if content_exists(video['url']):
+                        logger.info(f"⏩ Already exists: {video['title']}")
                         continue
                     
-                    logger.info(f"🎵 Processing: {video['title']}")
+                    logger.info(f"🎵 Processing [{index+1}/{len(results)}]: {video['title']}")
                     
                     try:
                         # Download audio
@@ -206,7 +214,8 @@ async def main():
                         )
                         
                         if not audio_path:
-                            logger.error(f"❌ Download failed for: {video['url']}")
+                            logger.error(f"❌ Download failed: {video['url']}")
+                            failed_count += 1
                             continue
                         
                         # Check file size
@@ -216,6 +225,7 @@ async def main():
                         if file_size_mb > MAX_FILE_SIZE_MB:
                             logger.warning(f"⚠️ File too large: {file_size_mb:.2f}MB")
                             cleanup_temp_files([audio_path])
+                            failed_count += 1
                             continue
                         
                         # Send to Telegram
@@ -224,7 +234,8 @@ async def main():
                                 chat_id=CHANNEL_ID,
                                 audio=f,
                                 title=zg2uni(title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"),
-                                performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး")
+                                performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး"),
+                                duration=180  # 3 minutes default
                             )
                         
                         if msg and msg.audio:
@@ -250,16 +261,24 @@ async def main():
                             logger.info(f"✅ Posted: {title}")
                         else:
                             logger.error(f"❌ Failed to send audio")
+                            failed_count += 1
                         
                         cleanup_temp_files([audio_path])
-                        await asyncio.sleep(2)  # Rate limit
+                        
+                        # Wait between downloads
+                        await asyncio.sleep(5)
                         
                     except Exception as e:
                         logger.error(f"❌ Error processing {video['title']}: {e}")
                         traceback.print_exc()
+                        failed_count += 1
                         continue
+                    
+                    # Progress update every 5 songs
+                    if (index + 1) % 5 == 0:
+                        logger.info(f"📊 Progress: {index + 1}/{len(results)} songs processed")
                 
-                logger.info(f"✅ Added {new_count} new songs")
+                logger.info(f"✅ Added {new_count} new songs, {failed_count} failed")
                 
             except Exception as e:
                 logger.error(f"❌ Auto-search error: {e}")
@@ -273,6 +292,11 @@ async def main():
                 return
             
             stats = get_stats()
+            
+            # Check download path
+            download_files = os.listdir(DOWNLOAD_PATH) if os.path.exists(DOWNLOAD_PATH) else []
+            download_count = len([f for f in download_files if f.endswith('.mp3')])
+            
             await update.message.reply_text(
                 f"🤖 **Bot Status**\n\n"
                 f"📊 **Database Statistics**\n"
@@ -280,8 +304,12 @@ async def main():
                 f"• မြန်မာသီချင်း: {stats['music']}\n"
                 f"• ဓမ္မတရား: {stats['dhamma']}\n"
                 f"• အခြား: {stats['others']}\n\n"
-                f"🔄 Auto-Search: {SEARCH_INTERVAL_MINUTES} min\n"
-                f"⏰ Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"📁 **Download Queue**\n"
+                f"• ဒေါင်းလုဒ်လုပ်ထားသော MP3: {download_count}\n\n"
+                f"🔄 **Auto-Search**\n"
+                f"• Interval: {SEARCH_INTERVAL_MINUTES} min\n"
+                f"• Query: {SEARCH_QUERY}\n\n"
+                f"⏰ **Server Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
         
         # ---- Build Application ----
@@ -312,7 +340,7 @@ async def main():
         # Auto-Search Job
         job_queue = application.job_queue
         if job_queue:
-            logger.info("✅ JobQueue is available!")  # ဒီ line ကို ထည့်ပါ
+            logger.info("✅ JobQueue is available!")
             job_queue.run_repeating(
                 auto_search_task,
                 interval=SEARCH_INTERVAL_MINUTES * 60,
