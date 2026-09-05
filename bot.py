@@ -15,10 +15,7 @@ from flask import Flask
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log')
-    ]
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('bot.log')]
 )
 logger = logging.getLogger(__name__)
 
@@ -33,10 +30,6 @@ def health_check():
 def ping():
     return "pong", 200
 
-@app.route('/status')
-def status():
-    return {"status": "healthy", "time": datetime.now().isoformat()}, 200
-
 def run_web_server():
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
@@ -44,19 +37,22 @@ def run_web_server():
 # ============ Main Bot Function ============
 async def main():
     try:
-        logger.info("🚀 Starting SoundCloud Music Bot...")
+        logger.info("🚀 Starting YouTube Music Bot...")
         
+        # Start web server
         thread = threading.Thread(target=run_web_server, daemon=True)
         thread.start()
         logger.info(f"✅ Web server started on port {os.environ.get('PORT', 10000)}")
         
+        # ---- Config ----
         from config import (
-            BOT_TOKEN, YOUTUBE_API_KEY, CHANNEL_ID, ADMIN_IDS,
-            MONGODB_URI, SEARCH_QUERY, MAX_RESULTS_PER_SEARCH,
-            SEARCH_INTERVAL_MINUTES, DOWNLOAD_PATH, MAX_FILE_SIZE_MB, DATABASE_NAME
+            BOT_TOKEN, CHANNEL_ID, ADMIN_IDS,
+            SEARCH_QUERY, MAX_RESULTS_PER_SEARCH,
+            SEARCH_INTERVAL_MINUTES, DOWNLOAD_PATH, MAX_FILE_SIZE_MB
         )
         logger.info("✅ Config loaded")
         
+        # ---- Database ----
         from database import init_db, test_connection, get_stats
         logger.info("📊 Initializing database...")
         init_db()
@@ -65,21 +61,32 @@ async def main():
             sys.exit(1)
         logger.info("✅ Database connected")
         
-        from youtube_api import search_youtube_music
+        # ---- SoundCloud API ----
+        from soundcloud_api import search_soundcloud_music
         logger.info("✅ SoundCloud API loaded")
         
-        from converter import download_audio_from_youtube, get_file_size_mb, zg2uni, cleanup_temp_files
+        # ---- Converter ----
+        from converter import download_audio_from_url, get_file_size_mb, zg2uni, cleanup_temp_files
         logger.info("✅ Converter loaded")
         
-        from handlers import start, search_command, status_command, button_handler
+        # ---- Handlers ----
+        from handlers import (
+            start, search_command, menu_command, button_handler,
+            add_song_command, add_album_command, delete_song_command, broadcast_command
+        )
         logger.info("✅ Handlers loaded")
         
+        # ---- Telegram Imports ----
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-        from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+        from telegram.ext import (
+            Application, CommandHandler, MessageHandler,
+            CallbackQueryHandler, filters
+        )
         
         os.makedirs(DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"📁 Download path: {DOWNLOAD_PATH}")
         
+        # ---- Channel Post Handler ----
         async def send_player_message(context, title, performer, file_id):
             keyboard = [
                 [
@@ -90,10 +97,9 @@ async def main():
             ]
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"🎵 **သီချင်းအသစ် ရောက်ရှိပါပြီ**\n\n📌 **ခေါင်းစဉ်:** {title}\n🎤 **အဆိုတော်:** {performer}\n\n⬇️ နားဆင်ရန် အောက်ပါခလုတ်ကို နှိပ်ပါ။",
+                text=f"🎵 **သီချင်းအသစ် ရောက်ရှိပါပြီ**\n\n📌 {title}\n🎤 {performer}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            logger.info(f"✅ Player message sent: {title}")
         
         async def channel_post_handler(update: Update, context):
             post = update.channel_post
@@ -106,13 +112,13 @@ async def main():
             file_id = audio.file_id
             
             from database import save_content
-            save_content(1, title, performer, "မြန်မာသီချင်းများ", file_id, "audio", "")
+            save_content(1, title, performer, "SoundCloud သီချင်းများ", file_id, "audio", "")
             await send_player_message(context, title, performer, file_id)
         
         async def auto_search_task(context):
             logger.info("🔍 Auto-search running...")
             try:
-                results = await asyncio.to_thread(search_youtube_music)
+                results = await asyncio.to_thread(search_soundcloud_music)
                 if not results:
                     logger.info("ℹ️ No new songs")
                     return
@@ -124,65 +130,71 @@ async def main():
                     if content_exists(video['url']):
                         continue
                     
-                    logger.info(f"🎵 Processing: {video['title'][:50]}...")
+                    logger.info(f"🎵 Processing: {video['title']}")
+                    audio_path, title, performer = await asyncio.to_thread(
+                        download_audio_from_url, video['url'], DOWNLOAD_PATH
+                    )
                     
-                    try:
-                        audio_path, title, performer = await asyncio.to_thread(
-                            download_audio_from_youtube, video['url'], DOWNLOAD_PATH
-                        )
-                        if not audio_path:
-                            logger.error(f"❌ Download failed: {video['url']}")
-                            continue
-                        
-                        file_size_mb = get_file_size_mb(audio_path)
-                        if file_size_mb > MAX_FILE_SIZE_MB:
-                            logger.warning(f"⚠️ File too large: {file_size_mb:.2f}MB")
-                            cleanup_temp_files([audio_path])
-                            continue
-                        
-                        with open(audio_path, 'rb') as f:
-                            msg = await context.bot.send_audio(
-                                chat_id=CHANNEL_ID,
-                                audio=f,
-                                title=zg2uni(title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"),
-                                performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး")
-                            )
-                        
-                        if msg and msg.audio:
-                            save_content(1, zg2uni(title), zg2uni(performer), "မြန်မာသီချင်းများ",
-                                       msg.audio.file_id, "audio", video['url'])
-                            await send_player_message(context, zg2uni(title), zg2uni(performer), msg.audio.file_id)
-                            new_count += 1
-                            logger.info(f"✅ Posted: {title}")
-                        else:
-                            logger.error(f"❌ Failed to send audio")
-                        
-                        cleanup_temp_files([audio_path])
-                        await asyncio.sleep(2)
-                        
-                    except Exception as e:
-                        logger.error(f"❌ Error: {e}")
-                        traceback.print_exc()
+                    if not audio_path:
                         continue
+                    
+                    file_size = get_file_size_mb(audio_path)
+                    if file_size > 50:
+                        cleanup_temp_files([audio_path])
+                        continue
+                    
+                    with open(audio_path, 'rb') as f:
+                        msg = await context.bot.send_audio(
+                            chat_id=CHANNEL_ID,
+                            audio=f,
+                            title=zg2uni(title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"),
+                            performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး")
+                        )
+                    
+                    if msg and msg.audio:
+                        save_content(1, zg2uni(title), zg2uni(performer), "SoundCloud သီချင်းများ",
+                                   msg.audio.file_id, "audio", video['url'])
+                        await send_player_message(context, zg2uni(title), zg2uni(performer), msg.audio.file_id)
+                        new_count += 1
+                    
+                    cleanup_temp_files([audio_path])
+                    await asyncio.sleep(3)
                 
                 logger.info(f"✅ Added {new_count} new songs")
             except Exception as e:
                 logger.error(f"❌ Auto-search error: {e}")
                 traceback.print_exc()
         
+        # ---- Build Application ----
         application = Application.builder().token(BOT_TOKEN).build()
         
+        # Public Commands
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("search", search_command))
-        application.add_handler(CommandHandler("status", status_command))
+        application.add_handler(CommandHandler("menu", menu_command))
+        
+        # Admin Commands
+        application.add_handler(CommandHandler("addsong", add_song_command))
+        application.add_handler(CommandHandler("addalbum", add_album_command))
+        application.add_handler(CommandHandler("deletesong", delete_song_command))
+        application.add_handler(CommandHandler("broadcast", broadcast_command))
+        
+        # Callback Handler
         application.add_handler(CallbackQueryHandler(button_handler))
+        
+        # Channel Post Handler
         application.add_handler(MessageHandler(filters.AUDIO, channel_post_handler))
         
-        job_queue = application.job_queue
-        if job_queue:
-            job_queue.run_repeating(auto_search_task, interval=SEARCH_INTERVAL_MINUTES * 60, first=10)
+        # Auto-Search Job
+        if application.job_queue:
+            application.job_queue.run_repeating(
+                auto_search_task,
+                interval=SEARCH_INTERVAL_MINUTES * 60,
+                first=10
+            )
             logger.info(f"🔄 Auto-search scheduled every {SEARCH_INTERVAL_MINUTES} minutes")
         
+        # ---- Run Bot ----
         logger.info("✅ Bot is ready!")
         await application.initialize()
         await application.start()
