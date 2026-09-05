@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-YouTube Music Bot - မြန်မာသီချင်းတွေကို အလိုအလျောက် ရှာဖွေပြီး ချန်နယ်မှာ တင်ပေးမယ့် Bot
-"""
-
 import os
 import sys
 import asyncio
@@ -12,40 +8,25 @@ import logging
 import traceback
 from datetime import datetime
 
-# ============ Logging Setup ============
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log')
-    ]
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('bot.log')]
 )
 logger = logging.getLogger(__name__)
 
-# ============ Main Function ============
 async def main():
     try:
         logger.info("🚀 Starting YouTube Music Bot...")
         
-        # ---- 1. Config ----
         from config import (
-            BOT_TOKEN,
-            YOUTUBE_API_KEY,
-            CHANNEL_ID,
-            ADMIN_IDS,
-            MONGODB_URI,
-            SEARCH_QUERY,
-            MAX_RESULTS_PER_SEARCH,
-            SEARCH_INTERVAL_MINUTES,
-            DOWNLOAD_PATH,
-            MAX_FILE_SIZE_MB,
-            DATABASE_NAME
+            BOT_TOKEN, YOUTUBE_API_KEY, CHANNEL_ID, ADMIN_IDS,
+            MONGODB_URI, SEARCH_QUERY, MAX_RESULTS_PER_SEARCH,
+            SEARCH_INTERVAL_MINUTES, DOWNLOAD_PATH, MAX_FILE_SIZE_MB, DATABASE_NAME
         )
         logger.info("✅ Config loaded successfully!")
         
-        # ---- 2. Database ----
-        from database import init_db, client, db, test_connection, get_stats
+        from database import init_db, test_connection, get_stats
         logger.info("📊 Initializing database...")
         init_db()
         
@@ -54,87 +35,49 @@ async def main():
             sys.exit(1)
         logger.info("✅ Database connected successfully!")
         
-        # ---- 3. YouTube API ----
-        from youtube_api import search_youtube_music, extract_video_id
+        from youtube_api import search_youtube_music
         logger.info("✅ YouTube API loaded successfully!")
         
-        # ---- 4. Converter ----
-        from converter import (
-            download_audio_from_youtube,
-            convert_mp4_to_mp3,
-            get_file_size_mb,
-            zg2uni,
-            cleanup_temp_files
-        )
+        from converter import download_audio_from_youtube, get_file_size_mb, zg2uni, cleanup_temp_files
         logger.info("✅ Converter loaded successfully!")
         
-        # ---- 5. Handlers ----
         from handlers import start, search_command, button_handler
         logger.info("✅ Handlers loaded successfully!")
         
-        # ---- 6. Telegram Imports ----
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-        from telegram.ext import (
-            Application,
-            CommandHandler,
-            MessageHandler,
-            CallbackQueryHandler,
-            ContextTypes,
-            filters
-        )
-        logger.info("✅ Telegram imports loaded successfully!")
+        from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
         
-        # ---- 7. Create Download Path ----
         os.makedirs(DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"📁 Download path: {DOWNLOAD_PATH}")
         
-        # ---- 8. Bot Handlers ----
-        async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            """ချန်နယ်မှာ ဖိုင်အသစ်တင်ရင် အလုပ်လုပ်မယ်"""
+        # ============ Handlers ============
+        async def channel_post_handler(update: Update, context):
             post = update.channel_post
-            if not post:
+            if not post or not post.audio:
                 return
             
-            logger.info(f"📩 New channel post: {post.message_id}")
+            audio = post.audio
+            title = audio.title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
+            performer = audio.performer or "အဆိုတော်မသတ်မှတ်ရသေး"
+            file_id = audio.file_id
             
-            if post.audio:
-                audio = post.audio
-                title = audio.title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
-                performer = audio.performer or "အဆိုတော်မသတ်မှတ်ရသေး"
-                file_id = audio.file_id
-                
-                logger.info(f"🎵 Audio: {title} - {performer}")
-                
-                title_uni = zg2uni(title)
-                performer_uni = zg2uni(performer)
-                
-                # Save to database
-                from database import save_content, content_exists
-                if not content_exists(""):
-                    save_content(
-                        category_id=1,
-                        title=title_uni,
-                        performer=performer_uni,
-                        album="မြန်မာသီချင်းများ",
-                        file_id=file_id,
-                        file_type="audio",
-                        youtube_url=""
-                    )
-                    logger.info(f"💾 Saved to database: {title_uni}")
-                
-                # Send player message
-                await send_player_message(context, title_uni, performer_uni, file_id)
+            logger.info(f"🎵 Audio: {title} - {performer}")
+            
+            title_uni = zg2uni(title)
+            performer_uni = zg2uni(performer)
+            
+            from database import save_content
+            save_content(1, title_uni, performer_uni, "မြန်မာသီချင်းများ", file_id, "audio", "")
+            
+            await send_player_message(context, title_uni, performer_uni, file_id)
         
         async def send_player_message(context, title, performer, file_id):
-            """Player Message ကို ချန်နယ်မှာ ပို့မယ်"""
             keyboard = [
                 [
                     InlineKeyboardButton("▶️ နားဆင်ရန်", callback_data=f"play_{file_id}"),
                     InlineKeyboardButton("⬇️ ဒေါင်းလုဒ်", callback_data=f"download_{file_id}")
                 ],
-                [
-                    InlineKeyboardButton("📋 အယ်လ်ဘမ်အားလုံး", callback_data="albums")
-                ]
+                [InlineKeyboardButton("📋 အယ်လ်ဘမ်အားလုံး", callback_data="albums")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -148,8 +91,7 @@ async def main():
             )
             logger.info(f"✅ Player message sent: {title}")
         
-        async def auto_search_task(context: ContextTypes.DEFAULT_TYPE):
-            """အလိုအလျောက် ရှာဖွေပြီး သီချင်းအသစ်တွေကို တင်ပေးမယ်"""
+        async def auto_search_task(context):
             logger.info("🔍 Auto-search running...")
             try:
                 results = await asyncio.to_thread(search_youtube_music)
@@ -162,7 +104,6 @@ async def main():
                 for video in results:
                     if not content_exists(video['url']):
                         logger.info(f"🎵 New: {video['title']}")
-                        # Download and send
                         audio_path, title, performer = await asyncio.to_thread(
                             download_audio_from_youtube, video['url'], DOWNLOAD_PATH
                         )
@@ -187,8 +128,7 @@ async def main():
                 logger.error(f"❌ Auto-search error: {e}")
                 traceback.print_exc()
         
-        async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            """/status Command"""
+        async def status_command(update: Update, context):
             user_id = update.effective_user.id
             if ADMIN_IDS and user_id not in ADMIN_IDS:
                 await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
@@ -206,44 +146,26 @@ async def main():
                 f"⏰ Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
         
-        # ---- 9. Build Application ----
+        # ============ Build Application ============
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # Commands
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("search", search_command))
         application.add_handler(CommandHandler("status", status_command))
-        
-        # Callback
         application.add_handler(CallbackQueryHandler(button_handler))
+        application.add_handler(MessageHandler(filters.AUDIO, channel_post_handler))
         
-        # Channel Post
-        application.add_handler(MessageHandler(
-            filters.AUDIO | filters.VIDEO | filters.Document.ALL,
-            channel_post_handler
-        ))
-        
-        # Auto-Search Job
         job_queue = application.job_queue
         if job_queue:
-            job_queue.run_repeating(
-                auto_search_task,
-                interval=SEARCH_INTERVAL_MINUTES * 60,
-                first=10
-            )
+            job_queue.run_repeating(auto_search_task, interval=SEARCH_INTERVAL_MINUTES * 60, first=10)
             logger.info(f"🔄 Auto-search scheduled every {SEARCH_INTERVAL_MINUTES} minutes")
-        else:
-            logger.warning("⚠️ JobQueue is not available! Auto-search will not work.")
         
-        # ---- 10. Run Bot (ပြင်ဆင်ပြီး) ----
+        # ============ Run Bot ============
         logger.info("✅ Bot is ready!")
-        
-        # Application ကို စတင်ပါ
         await application.initialize()
         await application.start()
         await application.updater.start_polling()
         
-        # Bot ကို ရပ်တန့်တဲ့အထိ စောင့်ဆိုင်းပါ
         try:
             while True:
                 await asyncio.sleep(1)
@@ -259,6 +181,5 @@ async def main():
         traceback.print_exc()
         sys.exit(1)
 
-# ============ Entry Point ============
 if __name__ == "__main__":
     asyncio.run(main())
