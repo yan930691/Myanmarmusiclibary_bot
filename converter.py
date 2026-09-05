@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
 import subprocess
 import logging
+import re
 import time
 import imageio_ffmpeg
 
@@ -51,12 +51,12 @@ def clean_filename(filename):
         filename = filename[:200]
     return filename or "unknown"
 
-# ============ Download Function ============
+# ============ YouTube/SoundCloud Download (Generic) ============
 
-def download_audio_from_youtube(youtube_url, output_path="downloads"):
+def download_audio_from_url(url, output_path="downloads"):
     """
-    SoundCloud ကနေ MP3 ဒေါင်းလုဒ်လုပ်မယ် (yt-dlp သုံးပြီး)
-    နာမည်က youtube ဖြစ်ပေမယ့် SoundCloud အတွက်လည်း အလုပ်လုပ်တယ်
+    YouTube ရော SoundCloud ရော နှစ်မျိုးလုံး ဒေါင်းလုဒ်လုပ်မယ်
+    ရလဒ်: (audio_file_path, title, performer)
     """
     os.makedirs(output_path, exist_ok=True)
     
@@ -77,11 +77,12 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         '--add-metadata',
         '--no-playlist',
         '--output', os.path.join(output_path, '%(title)s.%(ext)s'),
-        youtube_url
+        url
     ]
     
-    logger.info(f"📥 Downloading: {youtube_url}")
+    logger.info(f"📥 Downloading: {url}")
     
+    # Rate limit ကိုရှောင်ဖို့ အနားယူပါ
     time.sleep(2)
     
     try:
@@ -97,6 +98,7 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
             logger.error(f"❌ Download failed: {result.stderr[:500]}")
             return None, None, None
         
+        # ဒေါင်းလုဒ်လုပ်ထားတဲ့ ဖိုင်ကို ရှာပါ
         for file in os.listdir(output_path):
             if file.endswith('.mp3'):
                 file_path = os.path.join(output_path, file)
@@ -115,6 +117,12 @@ def download_audio_from_youtube(youtube_url, output_path="downloads"):
         logger.error(f"❌ Error: {e}")
         return None, None, None
 
+def download_audio_from_youtube(youtube_url, output_path="downloads"):
+    """YouTube ကနေ MP3 ဒေါင်းလုဒ်လုပ်မယ် (အတူတူပါ)"""
+    return download_audio_from_url(youtube_url, output_path)
+
+# ============ Helper Functions ============
+
 def get_file_size_mb(file_path):
     if os.path.exists(file_path):
         try:
@@ -130,4 +138,4 @@ def cleanup_temp_files(file_paths):
                 os.remove(path)
                 logger.debug(f"🗑️ Cleaned up: {path}")
             except Exception as e:
-                logger.warning(f"⚠️ Cleanup error for {path}: {e}")
+                logger.warning(f"⚠️ Cleanup error: {e}")
