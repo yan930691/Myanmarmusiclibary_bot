@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 from datetime import datetime
 from pymongo import MongoClient
@@ -10,6 +13,7 @@ from converter import zg2uni
 
 logger = logging.getLogger(__name__)
 
+# MongoDB Client
 client = MongoClient(MONGODB_URI)
 db = client[DATABASE_NAME]
 
@@ -91,6 +95,13 @@ def content_exists(youtube_url):
         logger.error(f"❌ Check content exists error: {e}")
         return False
 
+def get_content_by_file_id(file_id):
+    try:
+        return contents_collection.find_one({"file_id": file_id})
+    except Exception as e:
+        logger.error(f"❌ Get content by file ID error: {e}")
+        return None
+
 def get_stats():
     try:
         total_contents = contents_collection.count_documents({})
@@ -105,3 +116,24 @@ def get_stats():
     except Exception as e:
         logger.error(f"❌ Get stats error: {e}")
         return {"total": 0, "music": 0, "dhamma": 0, "others": 0}
+
+def get_categories():
+    """Category အားလုံးကို ယူမယ်"""
+    try:
+        return list(categories_collection.find({}, {
+            "_id": 0,
+            "id": {"$toString": "$_id"},
+            "content_type_id": 1,
+            "name": 1
+        }))
+    except Exception as e:
+        logger.error(f"❌ Get categories error: {e}")
+        return []
+
+def delete_content(content_id):
+    try:
+        result = contents_collection.delete_one({"_id": ObjectId(content_id)})
+        return result.deleted_count > 0
+    except Exception as e:
+        logger.error(f"❌ Delete content error: {e}")
+        return False
