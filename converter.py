@@ -61,59 +61,34 @@ def zg2uni(text):
         return text
     
     result = text
-    
-    # ပထမအဆင့်: ဇော်ဂျီပုံစံများကို ပြောင်းပါ
     for zg, uni in ZAWGYI_SPECIAL_CASES.items():
         result = result.replace(zg, uni)
-    
-    # ဒုတိယအဆင့်: ကျန်တဲ့ စာလုံးတွေကို ပြောင်းပါ
     for zg, uni in ZAWGYI_TO_UNICODE_MAP.items():
         result = result.replace(zg, uni)
-    
     return result
-
-def is_zawgyi(text):
-    """စာသားက ဇော်ဂျီဟုတ်မဟုတ် စစ်ဆေးမယ်"""
-    if not text:
-        return False
-    
-    zawgyi_patterns = ['္', 'ႏ', '႐', '၍', '၌', 'ေက', 'ေခ']
-    for pattern in zawgyi_patterns:
-        if pattern in text:
-            return True
-    return False
 
 def clean_filename(filename):
     """ဖိုင်နာမည်ကို သန့်ရှင်းအောင်လုပ်မယ်"""
     if not filename:
         return "unknown"
-    
-    # မလိုအပ်တဲ့ စာလုံးတွေကို ဖယ်ရှားပါ
     filename = re.sub(r'[<>:"/\\|?*]', '', filename)
     filename = re.sub(r'\s+', ' ', filename).strip()
-    
-    # ရှည်လွန်းရင် ဖြတ်ပါ
     if len(filename) > 200:
         filename = filename[:200]
-    
     return filename or "unknown"
 
 # ============ YouTube Download Functions ============
 
 def download_audio_from_youtube(youtube_url, output_path=None):
-    """
-    YouTube ဗီဒီယိုကနေ MP3 ကို yt-dlp သုံးပြီး ဒေါင်းလုဒ်လုပ်မယ်
-    ရလဒ်: (audio_file_path, title, performer)
-    """
+    """YouTube ဗီဒီယိုကနေ MP3 ကို yt-dlp သုံးပြီး ဒေါင်းလုဒ်လုပ်မယ်"""
     if not output_path:
         output_path = DOWNLOAD_PATH
     
     os.makedirs(output_path, exist_ok=True)
     
-    # yt-dlp အတွက် Command
     cmd = [
         'yt-dlp',
-        '--ffmpeg-location', FFMPEG_PATH,  # ffmpeg path ကို ပြောပါ
+        '--ffmpeg-location', FFMPEG_PATH,
         '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '5',
@@ -131,135 +106,37 @@ def download_audio_from_youtube(youtube_url, output_path=None):
             cmd,
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
             timeout=300
         )
         
-        logger.info(f"✅ Download completed for: {youtube_url}")
+        if result.returncode != 0:
+            logger.error(f"❌ Download failed: {result.stderr[:500]}")
+            return None, None, None
         
-        # ဒေါင်းလုဒ်လုပ်ထားတဲ့ ဖိုင်ကို ရှာမယ်
         for file in os.listdir(output_path):
             if file.endswith('.mp3'):
                 file_path = os.path.join(output_path, file)
                 title = os.path.splitext(file)[0]
-                performer = "Unknown"
-                
                 title = clean_filename(title)
-                
-                logger.info(f"📁 Downloaded file: {file_path}")
-                return file_path, title, performer
+                logger.info(f"📁 Downloaded: {file_path}")
+                return file_path, title, "Unknown"
         
-        logger.error(f"❌ No MP3 file found for: {youtube_url}")
+        logger.error(f"❌ No MP3 file found")
         return None, None, None
         
     except subprocess.TimeoutExpired:
-        logger.error(f"❌ Download timeout for: {youtube_url}")
-        return None, None, None
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Download error for {youtube_url}")
-        logger.error(f"   stderr: {e.stderr[:500]}")
+        logger.error(f"❌ Download timeout")
         return None, None, None
     except Exception as e:
-        logger.error(f"❌ Unexpected download error: {e}")
+        logger.error(f"❌ Download error: {e}")
         return None, None, None
-
-def download_audio_from_youtube_with_info(youtube_url, output_path=None):
-    """
-    YouTube ဗီဒီယိုကနေ MP3 ကို ဒေါင်းလုဒ်လုပ်ပြီး
-    သီချင်းအချက်အလက်တွေကိုပါ ပြန်ပေးမယ်
-    """
-    if not output_path:
-        output_path = DOWNLOAD_PATH
-    
-    os.makedirs(output_path, exist_ok=True)
-    
-    # ပထမဆုံး Video Info ကို ယူပါ
-    try:
-        info_cmd = [
-            'yt-dlp',
-            '--dump-json',
-            '--no-playlist',
-            youtube_url
-        ]
-        
-        info_result = subprocess.run(
-            info_cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30
-        )
-        
-        import json
-        video_info = json.loads(info_result.stdout)
-        
-        title = video_info.get('title', 'Unknown')
-        uploader = video_info.get('uploader', 'Unknown')
-        duration = video_info.get('duration', 0)
-        
-        title = clean_filename(title)
-        
-    except Exception as e:
-        logger.warning(f"⚠️ Could not get video info: {e}")
-        title = "Unknown"
-        uploader = "Unknown"
-        duration = 0
-    
-    # ဒေါင်းလုဒ်လုပ်ပါ
-    audio_path, _, _ = download_audio_from_youtube(youtube_url, output_path)
-    
-    if audio_path:
-        return audio_path, title, uploader, duration
-    else:
-        return None, None, None, None
-
-def convert_mp4_to_mp3(video_path, output_path=None):
-    """MP4 ဗီဒီယိုကို MP3 အသံအဖြစ် ပြောင်းမယ်"""
-    if not output_path:
-        output_path = DOWNLOAD_PATH
-    
-    os.makedirs(output_path, exist_ok=True)
-    
-    try:
-        video = VideoFileClip(video_path)
-        if video.audio is None:
-            logger.warning(f"⚠️ No audio track in: {video_path}")
-            return None, "No audio track found"
-        
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        output_file = os.path.join(output_path, f"{base_name}.mp3")
-        
-        video.audio.write_audiofile(
-            output_file,
-            codec='mp3',
-            bitrate="192k",
-            verbose=False,
-            logger=None
-        )
-        video.close()
-        
-        logger.info(f"✅ Converted: {video_path} -> {output_file}")
-        return output_file, None
-        
-    except Exception as e:
-        logger.error(f"❌ Conversion error: {e}")
-        return None, str(e)
 
 def get_file_size_mb(file_path):
     """ဖိုင်ရဲ့ အရွယ်အစား (MB) ကို ယူမယ်"""
     if os.path.exists(file_path):
         try:
-            size_bytes = os.path.getsize(file_path)
-            return size_bytes / (1024 * 1024)
-        except Exception:
-            return 0
-    return 0
-
-def get_file_size_bytes(file_path):
-    """ဖိုင်ရဲ့ အရွယ်အစား (Bytes) ကို ယူမယ်"""
-    if os.path.exists(file_path):
-        try:
-            return os.path.getsize(file_path)
+            return os.path.getsize(file_path) / (1024 * 1024)
         except Exception:
             return 0
     return 0
@@ -272,53 +149,4 @@ def cleanup_temp_files(file_paths):
                 os.remove(path)
                 logger.debug(f"🗑️ Cleaned up: {path}")
             except Exception as e:
-                logger.warning(f"⚠️ Cleanup error for {path}: {e}")
-
-def cleanup_directory(directory_path, pattern=None):
-    """ဖိုင်တွဲထဲက ဖိုင်တွေကို ရှင်းပစ်မယ်"""
-    if not os.path.exists(directory_path):
-        return
-    
-    try:
-        for file in os.listdir(directory_path):
-            file_path = os.path.join(directory_path, file)
-            if pattern and not re.search(pattern, file):
-                continue
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                logger.debug(f"🗑️ Cleaned up: {file_path}")
-    except Exception as e:
-        logger.warning(f"⚠️ Directory cleanup error: {e}")
-
-def ensure_download_directory():
-    """Download ဖိုင်တွဲ ရှိမရှိ စစ်ဆေးပြီး မရှိရင် ဖန်တီးမယ်"""
-    os.makedirs(DOWNLOAD_PATH, exist_ok=True)
-    return DOWNLOAD_PATH
-
-def get_ffmpeg_version():
-    """ffmpeg ဗားရှင်းကို ယူမယ်"""
-    try:
-        result = subprocess.run(
-            [FFMPEG_PATH, '-version'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            return result.stdout.split('\n')[0]
-        else:
-            return "Unknown"
-    except Exception:
-        return "Not found"
-
-def test_ffmpeg():
-    """ffmpeg အလုပ်လုပ်လား စမ်းသပ်မယ်"""
-    try:
-        result = subprocess.run(
-            [FFMPEG_PATH, '-version'],
-            capture_output=True,
-            timeout=5
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+                logger.warning(f"⚠️ Cleanup error: {e}")
