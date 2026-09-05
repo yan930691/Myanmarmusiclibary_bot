@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+YouTube Music Bot - မြန်မာသီချင်းတွေကို အလိုအလျောက် ရှာဖွေပြီး ချန်နယ်မှာ တင်ပေးမယ့် Bot
+"""
+
 import os
 import sys
 import asyncio
@@ -23,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============ Flask Web Server (to satisfy Render port requirement) ============
+# ============ Flask Web Server ============
 app = Flask(__name__)
 
 @app.route('/')
@@ -33,6 +37,10 @@ def health_check():
 @app.route('/ping')
 def ping():
     return "pong", 200
+
+@app.route('/status')
+def status():
+    return {"status": "healthy", "time": datetime.now().isoformat()}, 200
 
 def run_web_server():
     """Run a simple web server for Render health checks"""
@@ -80,42 +88,116 @@ async def main():
         logger.info("✅ YouTube API loaded successfully!")
         
         # ---- 4. Converter ----
-        from converter import download_audio_from_youtube, get_file_size_mb, zg2uni, cleanup_temp_files
+        from converter import (
+            download_audio_from_youtube,
+            get_file_size_mb,
+            zg2uni,
+            cleanup_temp_files
+        )
         logger.info("✅ Converter loaded successfully!")
         
         # ---- 5. Handlers ----
-        from handlers import start, search_command, button_handler
+        from handlers import (
+            start,
+            search_command,
+            status_command,
+            stats_command,
+            add_category,
+            add_song,
+            delete_song,
+            broadcast,
+            restart_command,
+            button_handler
+        )
         logger.info("✅ Handlers loaded successfully!")
         
         # ---- 6. Telegram Imports ----
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-        from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+        from telegram.ext import (
+            Application,
+            CommandHandler,
+            MessageHandler,
+            CallbackQueryHandler,
+            filters
+        )
+        logger.info("✅ Telegram imports loaded successfully!")
         
         # ---- 7. Create Download Path ----
         os.makedirs(DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"📁 Download path: {DOWNLOAD_PATH}")
         
-        # ============ Bot Handlers ============
+        # ---- 8. Bot Handlers ----
         async def channel_post_handler(update: Update, context):
             """ချန်နယ်မှာ ဖိုင်အသစ်တင်ရင် အလုပ်လုပ်မယ်"""
             post = update.channel_post
-            if not post or not post.audio:
+            if not post:
                 return
             
-            audio = post.audio
-            title = audio.title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
-            performer = audio.performer or "အဆိုတော်မသတ်မှတ်ရသေး"
-            file_id = audio.file_id
+            logger.info(f"📩 New channel post: {post.message_id}")
             
-            logger.info(f"🎵 Audio: {title} - {performer}")
+            # Audio ဖိုင်အတွက်
+            if post.audio:
+                audio = post.audio
+                title = audio.title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"
+                performer = audio.performer or "အဆိုတော်မသတ်မှတ်ရသေး"
+                file_id = audio.file_id
+                
+                logger.info(f"🎵 Audio: {title} - {performer}")
+                
+                title_uni = zg2uni(title)
+                performer_uni = zg2uni(performer)
+                
+                # Save to database
+                from database import save_content
+                save_content(
+                    category_id=1,
+                    title=title_uni,
+                    performer=performer_uni,
+                    album="မြန်မာသီချင်းများ",
+                    file_id=file_id,
+                    file_type="audio",
+                    youtube_url="",
+                    metadata=""
+                )
+                logger.info(f"💾 Saved to database: {title_uni}")
+                
+                # Send player message
+                await send_player_message(context, title_uni, performer_uni, file_id)
             
-            title_uni = zg2uni(title)
-            performer_uni = zg2uni(performer)
+            # Video ဖိုင်အတွက် (MP4 to MP3)
+            elif post.video:
+                video = post.video
+                title = post.caption or "ဗီဒီယိုဖိုင်"
+                file_id = video.file_id
+                
+                logger.info(f"🎬 Video detected: {title}")
+                
+                # Video ကို Download လုပ်ပြီး MP3 ပြောင်းမယ်
+                # ဒီအပိုင်းက နောက်ထပ် ရေးဖို့ လိုပါတယ်
+                await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text="🎬 **ဗီဒီယိုဖိုင် တွေ့ရှိပါပြီ**\n\n"
+                         "MP3 အဖြစ် ပြောင်းလဲခြင်းကို လက်ရှိ ပံ့ပိုးမထားသေးပါဘူး။"
+                )
+                logger.warning("⚠️ Video to MP3 conversion not implemented yet")
             
-            from database import save_content
-            save_content(1, title_uni, performer_uni, "မြန်မာသီချင်းများ", file_id, "audio", "")
-            
-            await send_player_message(context, title_uni, performer_uni, file_id)
+            # Document ဖိုင်အတွက်
+            elif post.document:
+                doc = post.document
+                file_name = doc.file_name or "Document"
+                file_id = doc.file_id
+                mime_type = doc.mime_type or ""
+                
+                logger.info(f"📄 Document: {file_name} ({mime_type})")
+                
+                # Document ကို သိမ်းဖို့ နောက်ထပ် ရေးဖို့ လိုပါတယ်
+                await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=f"📄 **Document ဖိုင် တွေ့ရှိပါပြီ**\n\n"
+                         f"📌 ဖိုင်နာမည်: {file_name}\n"
+                         f"📌 MIME Type: {mime_type}\n\n"
+                         "ဒီဖိုင်ကို လက်ရှိ ပံ့ပိုးမထားသေးပါဘူး။"
+                )
         
         async def send_player_message(context, title, performer, file_id):
             """Player Message ကို ချန်နယ်မှာ ပို့မယ်"""
@@ -124,7 +206,9 @@ async def main():
                     InlineKeyboardButton("▶️ နားဆင်ရန်", callback_data=f"play_{file_id}"),
                     InlineKeyboardButton("⬇️ ဒေါင်းလုဒ်", callback_data=f"download_{file_id}")
                 ],
-                [InlineKeyboardButton("📋 အယ်လ်ဘမ်အားလုံး", callback_data="albums")]
+                [
+                    InlineKeyboardButton("📋 အယ်လ်ဘမ်အားလုံး", callback_data="albums")
+                ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -152,10 +236,20 @@ async def main():
                 for video in results:
                     if not content_exists(video['url']):
                         logger.info(f"🎵 New: {video['title']}")
+                        
+                        # Download and send
                         audio_path, title, performer = await asyncio.to_thread(
                             download_audio_from_youtube, video['url'], DOWNLOAD_PATH
                         )
+                        
                         if audio_path:
+                            # Check file size
+                            file_size_mb = get_file_size_mb(audio_path)
+                            if file_size_mb > MAX_FILE_SIZE_MB:
+                                logger.warning(f"⚠️ File too large: {file_size_mb:.2f}MB")
+                                cleanup_temp_files([audio_path])
+                                continue
+                            
                             with open(audio_path, 'rb') as f:
                                 msg = await context.bot.send_audio(
                                     chat_id=CHANNEL_ID,
@@ -163,10 +257,25 @@ async def main():
                                     title=zg2uni(title or "ခေါင်းစဉ်မသတ်မှတ်ရသေး"),
                                     performer=zg2uni(performer or "အဆိုတော်မသတ်မှတ်ရသေး")
                                 )
+                            
                             if msg.audio:
-                                save_content(1, zg2uni(title), zg2uni(performer), "မြန်မာသီချင်းများ", 
-                                           msg.audio.file_id, "audio", video['url'])
-                                await send_player_message(context, zg2uni(title), zg2uni(performer), msg.audio.file_id)
+                                save_content(
+                                    category_id=1,
+                                    title=zg2uni(title),
+                                    performer=zg2uni(performer),
+                                    album="မြန်မာသီချင်းများ",
+                                    file_id=msg.audio.file_id,
+                                    file_type="audio",
+                                    youtube_url=video['url'],
+                                    metadata=""
+                                )
+                                await send_player_message(
+                                    context,
+                                    zg2uni(title),
+                                    zg2uni(performer),
+                                    msg.audio.file_id
+                                )
+                            
                             cleanup_temp_files([audio_path])
                             new_count += 1
                             await asyncio.sleep(2)
@@ -176,40 +285,44 @@ async def main():
                 logger.error(f"❌ Auto-search error: {e}")
                 traceback.print_exc()
         
-        async def status_command(update: Update, context):
-            """/status Command"""
-            user_id = update.effective_user.id
-            if ADMIN_IDS and user_id not in ADMIN_IDS:
-                await update.message.reply_text("⛔ သင်သည် Bot Admin မဟုတ်ပါ။")
-                return
-            
-            stats = get_stats()
-            await update.message.reply_text(
-                f"🤖 **Bot Status**\n\n"
-                f"📊 **Database Statistics**\n"
-                f"• စုစုပေါင်း: {stats['total']}\n"
-                f"• မြန်မာသီချင်း: {stats['music']}\n"
-                f"• ဓမ္မတရား: {stats['dhamma']}\n"
-                f"• အခြား: {stats['others']}\n\n"
-                f"🔄 Auto-Search: {SEARCH_INTERVAL_MINUTES} min\n"
-                f"⏰ Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-        
-        # ============ Build Application ============
+        # ---- 9. Build Application ----
         application = Application.builder().token(BOT_TOKEN).build()
         
+        # Public Commands
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("search", search_command))
         application.add_handler(CommandHandler("status", status_command))
-        application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.AUDIO, channel_post_handler))
         
+        # Admin Commands
+        application.add_handler(CommandHandler("stats", stats_command))
+        application.add_handler(CommandHandler("addcategory", add_category))
+        application.add_handler(CommandHandler("addsong", add_song))
+        application.add_handler(CommandHandler("deletesong", delete_song))
+        application.add_handler(CommandHandler("broadcast", broadcast))
+        application.add_handler(CommandHandler("restart", restart_command))
+        
+        # Callback Handler
+        application.add_handler(CallbackQueryHandler(button_handler))
+        
+        # Channel Post Handler
+        application.add_handler(MessageHandler(
+            filters.AUDIO | filters.VIDEO | filters.Document.ALL,
+            channel_post_handler
+        ))
+        
+        # Auto-Search Job
         job_queue = application.job_queue
         if job_queue:
-            job_queue.run_repeating(auto_search_task, interval=SEARCH_INTERVAL_MINUTES * 60, first=10)
+            job_queue.run_repeating(
+                auto_search_task,
+                interval=SEARCH_INTERVAL_MINUTES * 60,
+                first=10
+            )
             logger.info(f"🔄 Auto-search scheduled every {SEARCH_INTERVAL_MINUTES} minutes")
+        else:
+            logger.warning("⚠️ JobQueue is not available! Auto-search will not work.")
         
-        # ============ Run Bot ============
+        # ---- 10. Run Bot ----
         logger.info("✅ Bot is ready!")
         await application.initialize()
         await application.start()
